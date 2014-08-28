@@ -1,0 +1,119 @@
+# -*- coding: cp1252 -*-
+"""
+Universidad del Valle de Guatemala
+Algoritmos y Estructuras de Datos
+Santiago González 13263
+Daniel Lara Moir 13424
+CPU.py
+DES para sistema operativo. Simula el comportamiento del procesador con la llegada
+y ejecución de instrucciones.
+"""
+import itertools
+import random
+import simpy
+import math
+
+CAPACIDAD_RAM = 100
+RANDOM_SEED = 23
+INTERVALO = 10.0
+CANTIDAD_PROCESOS = 25
+lista = []
+
+
+
+
+
+def source(env, cantidad, intervalo, ram, cpu, waiting):
+    for i in range(cantidad):
+        instrucciones = random.randint(1,10)
+        memoria = random.randint(1,10)
+        p = proceso(env, 'Proceso %d' % i, memoria, ram, cpu, waiting, instrucciones)
+        env.process(p)
+        t = random.expovariate(1.0/intervalo)
+        yield env.timeout(t)
+
+def proceso(env, nombre, memoria, ram, cpu, waiting, instrucciones):
+    global total
+    arrive = env.now
+    print('%7.4f %s: llega. Esperando ram %s. Ram disponible: %s' % (arrive, nombre, memoria, ram.level))
+
+    
+    with ram.get(memoria) as req:
+
+        yield req
+
+        espera = env.now - arrive
+        print('%7.4f %s: ready, espero: %6.3f' % (env.now, nombre, espera))
+
+        while instrucciones > 0:
+
+            with cpu.request() as reqcpu:
+                yield reqcpu
+                print ('%7.4f %s: corriendo %s instrucciones '  % (env.now, nombre, instrucciones))
+
+                yield env.timeout(1)
+
+                if instrucciones > 3:
+                    instrucciones = instrucciones - 3
+                else:
+                    instrucciones = 0
+
+            if instrucciones > 0:
+                sigue = random.choice([0,1])
+                if sigue == 0:
+                    with waiting.request() as reqwaiting:
+                        yield reqwaiting
+                        print ('%7.4f %s: waiting' % (env.now, nombre))
+
+                        yield env.timeout(1)
+
+                print ('%7.4f %s: ready' % (env.now, nombre))
+
+            totalTime = env.now - arrive
+            lista.append(totalTime)
+            total = total + totalTime
+            print ('%7.4f %s: terminado %s' % (env.now, nombre, totalTime))
+            with ram.put(memoria) as reqDevolverRam:
+                yield reqDevolverRam
+                print ('%7.4f %s: devolver ram: %s' % (env.now, nombre, memoria))
+                
+
+print 'Sistema Operativo'
+
+     
+   
+random.seed(RANDOM_SEED)
+totalTime = 0
+
+env = simpy.Environment()
+
+cpu = simpy.Resource(env, capacity=1)
+ram = simpy.Container(env, init=100, capacity=CAPACIDAD_RAM)
+waiting = simpy.Resource(env, capacity=1)
+total = 0
+env.process(source(env,CANTIDAD_PROCESOS,INTERVALO, ram, cpu, waiting))
+env.run()
+print 'Tiempo total de espera ', total
+promedio = total/CANTIDAD_PROCESOS
+print 'Promedio de espera: ', promedio
+
+
+index= 0
+while index < len(lista):
+    lista[index] = lista[index]- promedio
+    lista[index] = lista[index] * lista[index]
+    index= index + 1
+pass
+
+index= 0
+desviacion = 0
+while index < len(lista):
+    desviacion = desviacion + lista[index]
+    index= index + 1
+pass
+
+desviacion = desviacion / CANTIDAD_PROCESOS
+
+desviacion = math.sqrt(desviacion)
+
+print 'Desviacion estandar: ', desviacion
