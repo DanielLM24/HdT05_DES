@@ -8,112 +8,121 @@ CPU.py
 DES para sistema operativo. Simula el comportamiento del procesador con la llegada
 y ejecución de instrucciones.
 """
+
+#importar módulos que serán utilizados
 import itertools
 import random
 import simpy
 import math
 
+
+#definir variables
 CAPACIDAD_RAM = 100
 RANDOM_SEED = 23
-INTERVALO = 10.0
+INTERVALO = 1.0
 CANTIDAD_PROCESOS = 25
+#definir lista para guardar valores para el calculo de desviación estándar
 lista = []
-
-
-
 
 
 def source(env, cantidad, intervalo, ram, cpu, waiting):
     for i in range(cantidad):
+        #determinar instrucciones y memoria para cada proceso
         instrucciones = random.randint(1,10)
         memoria = random.randint(1,10)
         p = proceso(env, 'Proceso %d' % i, memoria, ram, cpu, waiting, instrucciones)
         env.process(p)
+        #utilizar un distribución exponencial para crear los procesos
         t = random.expovariate(1.0/intervalo)
         yield env.timeout(t)
 
 def proceso(env, nombre, memoria, ram, cpu, waiting, instrucciones):
+    #definir variable total
     global total
+    #tomar el tiempo de llegada y mostrar
     arrive = env.now
     print('%7.4f %s: llega. Esperando ram %s. Ram disponible: %s' % (arrive, nombre, memoria, ram.level))
 
-    
+    #hacer cola con la memoria
     with ram.get(memoria) as req:
-
         yield req
-
+        #mostrar la espera
         espera = env.now - arrive
         print('%7.4f %s: ready, espero: %6.3f' % (env.now, nombre, espera))
 
+        #ejecutar proceso dependiendo de instrucciones
         while instrucciones > 0:
-
+            #hacer cola para el cpu
             with cpu.request() as reqcpu:
                 yield reqcpu
+                #mostrar que se corren la instrucciones y espera
                 print ('%7.4f %s: corriendo %s instrucciones '  % (env.now, nombre, instrucciones))
-
                 yield env.timeout(1)
-
+                #restar las instrucciones realizadas
                 if instrucciones > 3:
                     instrucciones = instrucciones - 3
                 else:
                     instrucciones = 0
 
             if instrucciones > 0:
+                #para determinar si se espera una interrupción I/O (ir a waiting)
                 sigue = random.choice([0,1])
                 if sigue == 0:
                     with waiting.request() as reqwaiting:
                         yield reqwaiting
                         print ('%7.4f %s: waiting' % (env.now, nombre))
-
                         yield env.timeout(1)
-
+                #regresar a ready
                 print ('%7.4f %s: ready' % (env.now, nombre))
 
+            #tomar el tiempo que se tardo el proceso y agregarlo a la lista
             totalTime = env.now - arrive
             lista.append(totalTime)
             total = total + totalTime
             print ('%7.4f %s: terminado %s' % (env.now, nombre, totalTime))
+            #regresar la memoria luego de utilizarla
             with ram.put(memoria) as reqDevolverRam:
                 yield reqDevolverRam
                 print ('%7.4f %s: devolver ram: %s' % (env.now, nombre, memoria))
                 
-
-print 'Sistema Operativo'
+#mostrar un título al correr
+print 'Simulación de Sistema Operativo'
 
      
-   
+#Establecer la semilla del random y crear el ambiente de la simulacion
 random.seed(RANDOM_SEED)
 totalTime = 0
-
 env = simpy.Environment()
 
+#empezar los procesos y luego correrlos
 cpu = simpy.Resource(env, capacity=1)
-ram = simpy.Container(env, init=100, capacity=CAPACIDAD_RAM)
+ram = simpy.Container(env, init=CAPACIDAD_RAM, capacity=CAPACIDAD_RAM)
 waiting = simpy.Resource(env, capacity=1)
 total = 0
 env.process(source(env,CANTIDAD_PROCESOS,INTERVALO, ram, cpu, waiting))
 env.run()
+#calcular el tiempo total de espera y su promedio y desplegar ambos
 print 'Tiempo total de espera ', total
 promedio = total/CANTIDAD_PROCESOS
 print 'Promedio de espera: ', promedio
 
-
+#a cada valor de la lista restarle el promedio y elevarlos al cuadrado
 index= 0
 while index < len(lista):
     lista[index] = lista[index]- promedio
     lista[index] = lista[index] * lista[index]
     index= index + 1
 pass
-
+#sumar todos los valores de la lista
 index= 0
 desviacion = 0
 while index < len(lista):
     desviacion = desviacion + lista[index]
     index= index + 1
 pass
-
+#calcular la varianza
 desviacion = desviacion / CANTIDAD_PROCESOS
-
+#sacar la raíz cuadrada de la varianza que se calculo anteriormente
 desviacion = math.sqrt(desviacion)
-
+#mostrar la desviación
 print 'Desviacion estandar: ', desviacion
